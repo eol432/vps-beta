@@ -1,8 +1,7 @@
 {
-  "name": "vps-fps",
-  "version": "2.0.3",
-  "description": "RIVALS - 친구들과 총싸움 (멀티플레이 FPS) Render 배포용",
-  "private": true,
+  "name": "rivals-fps",
+  "version": "1.0.0",
+  "description": "RIVALS - 친구들과 총싸움 (Three.js 멀티플레이 FPS, Render 배포용)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -11,6 +10,8 @@
     "node": ">=18"
   },
   "dependencies": {
-    "ws": "^8.18.0"
-  }
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  },
+  "license": "MIT"
 }
