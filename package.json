@@ -1,0 +1,10 @@
+{
+  "name": "vps-game-server",
+  "version": "1.0.0",
+  "description": "VPS 멀티플레이 게임 서버 (Render 배포용)",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "ws": "^8.18.0" },
+  "license": "MIT"
+}
