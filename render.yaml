@@ -1,12 +1,11 @@
 services:
   - type: web
-    name: vps-game
+    name: vps-fps
     runtime: node
     plan: free
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /healthz
-    autoDeploy: true
     envVars:
       - key: NODE_VERSION
         value: 20

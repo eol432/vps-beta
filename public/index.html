@@ -76,7 +76,7 @@ button{width:100%;padding:13px;border:0;border-radius:10px;background:var(--ac);
 #tcard h2{margin:0 0 4px}
 #tbtns{display:flex;gap:14px;margin:18px 0 12px}
 .tpk{flex:1;width:auto;display:flex;flex-direction:column;gap:6px;align-items:center;padding:30px 8px;border-radius:14px;color:#fff;font-weight:400;font-size:13px}.tpk b{font-size:26px}.tpk small{color:#fff;opacity:.8;font-size:13px}
-#tpk1{background:linear-gradient(160deg,#8a2a36,#5a1b24);border:2px solid #ff6b78}#tpk2{background:linear-gradient(160deg,#2a4690,#1b2d5a);border:2px solid #6b9bff}
+.tpk.off{background:#3a3d46!important;border-color:#6b6f7a!important;filter:grayscale(1);opacity:.55;cursor:not-allowed}.tpk.off:hover{transform:none}#tpk1{background:linear-gradient(160deg,#8a2a36,#5a1b24);border:2px solid #ff6b78}#tpk2{background:linear-gradient(160deg,#2a4690,#1b2d5a);border:2px solid #6b9bff}
 #tback{background:#2a3358;font-size:15px}
 .wc{flex-direction:row;align-items:center;gap:14px}.wi{flex:none;display:block;background:#0b0f1a;border-radius:8px;padding:4px 6px;line-height:0}.wt{display:flex;flex-direction:column;align-items:flex-start;gap:2px}.wc b{font-size:17px}.wc small{opacity:.7}.wc.on{border-color:#ffd166;background:#2a3358}
 #wname{font-weight:800;font-size:16px;margin-bottom:4px;color:#ffd166}
@@ -134,29 +134,28 @@ body:after{content:"";position:fixed;inset:0;pointer-events:none;background:radi
   <div id="stat">접속 확인 중…</div>
 </div></div>
 <script>
-/* Render 서버 연결용: claude.use("room") 대신 WebSocket(/ws)으로 같은 인터페이스를 제공 */
+/* Render 배포용 멀티플레이 연결 (claude.use("room") 대체) */
 (function(){
-if(window.claude&&window.claude.use)return;
-var ws=null,myId=null,peers={},handlers={},mine=null,backoff=500;
-function fire(k,m){(handlers[k]||[]).slice().forEach(function(f){try{f(m)}catch(e){}})}
-function open(){return ws&&ws.readyState===1}
+var roomName=new URLSearchParams(location.search).get("room")||"main";
+var ws=null,myId=null,peers={},handlers={},open=false,wait=500,myPres={};
+function mkPeer(id,pr){return{peer:id,kind:"viewer",presence:pr||{},isMe:id===myId,sameTab:id===myId}}
 function connect(){
- try{ws=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host+"/ws")}catch(e){setTimeout(connect,backoff);return}
- ws.onopen=function(){backoff=500;if(mine)ws.send(JSON.stringify({t:"p",d:mine}))};
+ try{ws=new WebSocket((location.protocol==="https:"?"wss:":"ws:")+"//"+location.host+"/ws?room="+encodeURIComponent(roomName))}catch(e){setTimeout(connect,2000);return}
+ ws.onopen=function(){open=true;wait=500};
  ws.onmessage=function(ev){var m;try{m=JSON.parse(ev.data)}catch(e){return}
-  if(m.t==="hello"){myId=m.id;peers={};m.peers.forEach(function(p){peers[p.id]=p.d||{}})}
-  else if(m.t==="pb"){m.u.forEach(function(u){peers[u[0]]=u[1]})}
+  if(m.t==="hello"){myId=m.id;peers={};for(var k in m.peers)peers[k]=mkPeer(k,m.peers[k]);peers[myId]=mkPeer(myId,myPres);
+   if(Object.keys(myPres).length)ws.send(JSON.stringify({t:"p",d:myPres}))}
+  else if(m.t==="p"){var p=peers[m.id]||(peers[m.id]=mkPeer(m.id));Object.assign(p.presence,m.d)}
   else if(m.t==="l"){delete peers[m.id]}
-  else if(m.t==="e"){fire(m.k,{peer:m.id,isMe:m.id===myId,data:m.d})}};
- ws.onclose=function(){ws=null;myId=null;peers={};setTimeout(connect,backoff);backoff=Math.min(5000,backoff*1.6)};
- ws.onerror=function(){try{ws.close()}catch(e){}};
-}
+  else if(m.t==="e"){var hs=handlers[m.k];if(hs)for(var i=0;i<hs.length;i++){try{hs[i]({data:m.d,peer:m.id,isMe:m.id===myId})}catch(e){console.error(e)}}}};
+ ws.onclose=function(){open=false;peers={};myId=null;setTimeout(connect,wait);wait=Math.min(5000,wait*1.6)};
+ ws.onerror=function(){try{ws.close()}catch(e){}}}
 var room={
- peers:function(){var a=[];if(myId)a.push({peer:myId,isMe:true,sameTab:true,kind:"viewer",presence:mine||{}});for(var k in peers)a.push({peer:k,isMe:false,sameTab:false,kind:"viewer",presence:peers[k]});return a},
- presence:function(d){mine=Object.assign(mine||{},d);if(open())ws.send(JSON.stringify({t:"p",d:d}));return Promise.resolve()},
- emit:function(k,d){if(open())ws.send(JSON.stringify({t:"e",k:k,d:d}));return Promise.resolve()},
- on:function(k,f){(handlers[k]=handlers[k]||[]).push(f);return function(){var i=(handlers[k]||[]).indexOf(f);if(i>=0)handlers[k].splice(i,1)}},
- connected:function(){return !!open()}
+ peers:function(){var a=[];for(var k in peers)a.push(peers[k]);return a},
+ presence:function(d){Object.assign(myPres,d);if(myId&&peers[myId])Object.assign(peers[myId].presence,d);if(open)ws.send(JSON.stringify({t:"p",d:d}));return Promise.resolve()},
+ emit:function(k,d){if(open)ws.send(JSON.stringify({t:"e",k:k,d:d}));return Promise.resolve()},
+ on:function(k,fn){(handlers[k]||(handlers[k]=[])).push(fn)},
+ connected:function(){return open&&!!myId}
 };
 window.claude={use:function(n){return Promise.resolve(n==="room"?room:null)}};
 connect();
@@ -229,12 +228,14 @@ function tree_old(x,z,r,H){cyl(x,z,r,H,0xc8a47a);var pine=((x*7+z*3)|0)%2===0,m=
 
 var _rock=rock,_log=log,_cyl=cyl,_tree=tree;var RC=0;function cl(v){return Math.max(-S+4,Math.min(S-4,v))}
 function nearP(x,z){for(var i=0;i<PONDS.length;i++)if(Math.hypot(x-PONDS[i][0],z-PONDS[i][1])<4.8)return true;return false}
+/* 모든 플레이어가 같은 맵: 고정 시드 난수 (장애물 배치 전용) */
+var SR=(function(s){return function(){s=(s+0x6D2B79F5)|0;var t=Math.imul(s^(s>>>15),1|s);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296}})(20240611);
 TILES.forEach(function(T){var ox=T[0],oz=T[1],sx=T[2],sz=T[3];
-var sw=Math.random()<.5,J=function(){return(Math.random()-.5)*5},px=function(x,z){return cl(ox+sx*(sw?z:x)*MS+J())},pz=function(x,z){return cl(oz+sz*(sw?x:z)*MS+J())};
+var sw=SR()<.5,J=function(){return(SR()-.5)*5},px=function(x,z){return cl(ox+sx*(sw?z:x)*MS+J())},pz=function(x,z){return cl(oz+sz*(sw?x:z)*MS+J())};
 var padOf=function(X,Z,hw,hd){var y=(gh(X,Z)*2+gh(X-hw,Z-hd)+gh(X+hw,Z-hd)+gh(X-hw,Z+hd)+gh(X+hw,Z+hd))/6;PADS.push([X,Z,hw,hd,y])},
-spot=function(x,z,hw,hd,gap){for(var t=0;t<45;t++){var X=px(x,z),Z=pz(x,z);if(t>10){X=cl(X+(Math.random()-.5)*t*.35);Z=cl(Z+(Math.random()-.5)*t*.35)}if(nearP(X,Z))continue;var ok=true;for(var a=4;a<boxes.length;a++){var q=boxes[a];if(Math.abs(X-q.x)<q.w/2+hw+gap&&Math.abs(Z-q.z)<q.d/2+hd+gap){ok=false;break}}if(ok)return[X,Z]}return null};
-var rock=function(x,z,w,d,h,c){if(w*d<20&&Math.random()<.3)return;var W=sw?d:w,D=sw?w:d,p=spot(x,z,W/2,D/2,2.2);if(!p)return;padOf(p[0],p[1],W/2,D/2);_rock(p[0],p[1],W,D,h,c)},
-log=function(x,z,l,r,az){var A=(sw?!az:!!az)!==(Math.random()<.25),hw=A?r:l/2,hd=A?l/2:r,p=spot(x,z,hw,hd,2.2);if(!p)return;padOf(p[0],p[1],hw,hd);_log(p[0],p[1],l,r,A)},
+spot=function(x,z,hw,hd,gap){for(var t=0;t<45;t++){var X=px(x,z),Z=pz(x,z);if(t>10){X=cl(X+(SR()-.5)*t*.35);Z=cl(Z+(SR()-.5)*t*.35)}if(nearP(X,Z))continue;var ok=true;for(var a=4;a<boxes.length;a++){var q=boxes[a];if(Math.abs(X-q.x)<q.w/2+hw+gap&&Math.abs(Z-q.z)<q.d/2+hd+gap){ok=false;break}}if(ok)return[X,Z]}return null};
+var rock=function(x,z,w,d,h,c){if(w*d<20&&SR()<.3)return;var W=sw?d:w,D=sw?w:d,p=spot(x,z,W/2,D/2,2.2);if(!p)return;padOf(p[0],p[1],W/2,D/2);_rock(p[0],p[1],W,D,h,c)},
+log=function(x,z,l,r,az){var A=(sw?!az:!!az)!==(SR()<.25),hw=A?r:l/2,hd=A?l/2:r,p=spot(x,z,hw,hd,2.2);if(!p)return;padOf(p[0],p[1],hw,hd);_log(p[0],p[1],l,r,A)},
 cyl=function(x,z,r,h,c){var p=spot(x,z,r*1.15,r*1.15,1.5);if(!p)return;padOf(p[0],p[1],r*1.15,r*1.15);return _cyl(p[0],p[1],r,h,c)},
 tree=function(x,z,r,H){var k=((x*7+z*3)|0)&3;if(k<2)rock(x,z,r*2.6,r*2.6,k?2.6:1.5,k?0xa9a398:0xbdb7aa);else log(x,z,5+r*2,1+r*.1,k===2)};
 rock(0,0,6,6,3.2,0xb3ada0);rock(-14,-10,5,2.4,3,0xa9a398);rock(14,10,5,2.4,3,0xa9a398);rock(-22,0,2.8,10,3.2,0xb3ada0);rock(22,0,2.8,10,3.2,0xb3ada0);
@@ -437,7 +438,7 @@ GS('<rect x="2" y="17" width="34" height="14" rx="3" fill="#2e3a2c"/><rect x="34
 GS('<rect x="30" y="16" width="70" height="13" rx="2" fill="#8a8f9c"/><rect x="96" y="19" width="26" height="6" fill="#555a66"/><rect x="30" y="28" width="46" height="6" fill="#555a66"/><path d="M34 29h18l6 24H40z" fill="#23272e"/><rect x="40" y="12" width="3" height="5" fill="#fff"/>'),
 GS('<rect x="2" y="17" width="26" height="13" rx="3" fill="#2b2d33"/><rect x="26" y="15" width="64" height="16" fill="#3a3d45"/><rect x="88" y="19" width="22" height="9" fill="#2b2d33"/><rect x="108" y="21" width="30" height="5" fill="#8a8f9c"/><rect x="44" y="31" width="22" height="16" rx="2" fill="#4b5a3a"/><rect x="40" y="10" width="30" height="5" fill="#555a66"/><path d="M96 28l-12 22M104 28l12 22" stroke="#555a66" stroke-width="3"/>'));
 var WP=[{n:"AK-47",ay:-.13,zf:55,d:30,hd:40,r:.10,sp:.02,rc:.010,sn:200,mz:-.78,desc:"강력한 한 방 · 반동 큼"},{n:"M4",ay:-.18,zf:52,d:24,hd:34,r:.085,sp:.012,rc:.006,sn:260,mz:-.74,desc:"균형 잡힌 만능 소총"},{n:"Vector",ay:-.18,zf:62,d:16,r:.05,sp:.04,rc:.004,sn:340,mz:-.5,desc:"초고속 연사 SMG · 근접전 최강"},{n:"AUG",ay:-.17,zf:40,d:22,hd:30,r:.09,sp:.008,rc:.005,sn:240,mz:-.56,desc:"정확하고 안정적인 불펍 소총"},{n:"K2",ay:-.2,zf:52,d:26,hd:38,r:.095,sp:.014,rc:.007,sn:220,mz:-.76,desc:"한국군 주력 소총 · 위력과 정확도 균형"}],curW=0;
-WP.push({n:"SPAS-12",ay:-.17,zf:50,d:11,r:.9,sp:.07,rc:.05,sn:110,mz:-.95,pl:8,au:false,mg:8,rl:2.6,tc:0xffc070,desc:"산탄 8발 · 근접 한 방 · 펌프액션"},
+WP.push({n:"SPAS-12",ay:-.17,zf:50,d:13,r:.8,sp:.055,rc:.05,sn:110,mz:-.95,pl:8,au:false,mg:8,rl:2.2,tc:0xffc070,desc:"산탄 8발 · 근접 한 방 · 펌프액션"},
 {n:"AWM",bolt:1,ay:-.2,zf:12,d:90,r:1.25,sp:.1,as:0,rc:.06,sn:70,mz:-1.15,au:false,mg:5,rl:3,tc:0x9fe8ff,desc:"저격총 · 조준 시 스코프 · 몸 90 / 헤드샷 180"},
 {n:"Desert Eagle",ay:-.15,zf:60,d:48,r:.55,sp:.012,rc:.03,sn:150,mz:-.52,au:false,mg:7,rl:1.6,tc:0xffd98a,desc:"보조무기 · 강력한 .50구경 · 정확한 단발 사격"},
 {n:"M249",ay:-.19,zf:45,d:21,hd:30,r:.075,sp:.03,rc:.008,sn:180,mz:-.88,mg:100,rl:4.2,tc:0xffd98a,desc:"100발 박스탄창 · 제압 사격"});
@@ -617,9 +618,11 @@ function foe(p){if(duel)return p.peer===duel.opp;return mode!=="team"||!P.team||
 function teamOf(peer){try{var q=room.peers().find(function(x){return x.peer===peer});return q&&q.presence?(q.presence.t|0):0}catch(e){return 0}}
 var TN=["","가다 위대","나동 연합"],TE=["","🔴","🔵"],TPcb=null,tabOn=false;
 function teamCnt(){var a=0,b=0;try{if(room)room.peers().forEach(function(q){if(!q.isMe&&q.kind==="viewer"&&q.presence&&q.presence.m==="team"){if(q.presence.t===1)a++;else if(q.presence.t===2)b++}})}catch(e){}return[0,a,b]}
-function updTeamPick(){var c=teamCnt();$("tc1").textContent="현재 "+c[1]+"명";$("tc2").textContent="현재 "+c[2]+"명"}
+function teamFull(t,c){c=c||teamCnt();return c[t]>c[3-t]}
+function updTeamPick(){var c=teamCnt(),t;for(t=1;t<=2;t++){var f=teamFull(t,c),b=$("tpk"+t);$("tc"+t).textContent=f?"현재 "+c[t]+"명 · 인원이 많아 선택 불가":"현재 "+c[t]+"명";b.classList.toggle("off",f);b.disabled=f}}
+setInterval(function(){if($("tpick").style.display==="flex")updTeamPick()},500);
 function teamPick(cb){TPcb=cb;firing=false;ads=false;keys={};$("menu").style.display="none";updTeamPick();$("tpick").style.display="flex";if(document.exitPointerLock)document.exitPointerLock()}
-function setTeam(t){P.team=t;$("tpick").style.display="none";var cb=TPcb;TPcb=null;if(cb)cb()}
+function setTeam(t){if(teamFull(t)){updTeamPick();feedback("상대 팀보다 인원이 많아 선택할 수 없어요",1500);return}P.team=t;$("tpick").style.display="none";var cb=TPcb;TPcb=null;if(cb)cb()}
 $("tpk1").onclick=function(){setTeam(1)};$("tpk2").onclick=function(){setTeam(2)};
 $("tback").onclick=function(){$("tpick").style.display="none";TPcb=null;$("menu").style.display="flex"};
 function renderTab(rows){var el=$("tab"),h="";

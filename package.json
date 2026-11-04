@@ -1,10 +1,16 @@
 {
-  "name": "vps-game-server",
-  "version": "1.0.0",
-  "description": "VPS 멀티플레이 게임 서버 (Render 배포용)",
+  "name": "vps-fps",
+  "version": "2.0.3",
+  "description": "RIVALS - 친구들과 총싸움 (멀티플레이 FPS) Render 배포용",
+  "private": true,
   "main": "server.js",
-  "scripts": { "start": "node server.js" },
-  "engines": { "node": ">=18" },
-  "dependencies": { "ws": "^8.18.0" },
-  "license": "MIT"
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
 }
