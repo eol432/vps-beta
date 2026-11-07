@@ -1,7 +1,8 @@
 {
   "name": "rivals-online",
   "version": "3.0.0",
-  "description": "RIVALS – 친구들과 총싸움 (Render 배포용)",
+  "private": true,
+  "description": "RIVALS - 친구들과 총싸움 (Render 배포용)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -9,5 +10,7 @@
   "engines": {
     "node": ">=18"
   },
-  "license": "MIT"
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
 }

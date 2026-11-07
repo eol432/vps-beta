@@ -146,50 +146,8 @@ body:after{content:"";position:fixed;inset:0;pointer-events:none;background:radi
   <button id="go">게임 시작</button>
   <div id="stat">접속 확인 중…</div>
 </div></div>
-<div id="bigmsg"></div><script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script>
-/* Render 온라인용: claude.use("room") 을 WebSocket(/ws) 서버로 대체 */
-(function(){
-var proto=location.protocol==="https:"?"wss://":"ws://",URL_=proto+location.host+"/ws";
-var ws=null,me=null,wait=[],L={},P={},list=null,myPres={},delay=500,opened=false;
-function dirty(){list=null}
-function ent(id){return P[id]||(P[id]={peer:id,isMe:id===me,sameTab:id===me,kind:"viewer",presence:{}})}
-function fire(e,m){var a=L[e];if(!a)return;for(var i=0;i<a.length;i++){try{a[i](m)}catch(x){console.error(x)}}}
-function raw(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o))}
-var room={
- peers:function(){if(!list){list=Object.keys(P).map(function(k){return P[k]})}return list},
- on:function(e,f){(L[e]=L[e]||[]).push(f)},
- emit:function(e,d){raw({t:"ev",e:e,d:d});return Promise.resolve()},
- presence:function(p){if(p){for(var k in p)myPres[k]=p[k];if(me)Object.assign(ent(me).presence,p);raw({t:"pres",d:p})}return Promise.resolve()},
- connected:function(){return !!(ws&&ws.readyState===1&&me)}
-};
-function connect(){
- try{ws=new WebSocket(URL_)}catch(e){setTimeout(connect,2000);return}
- ws.onmessage=function(ev){
-  var m;try{m=JSON.parse(ev.data)}catch(e){return}
-  if(m.t==="hello"){
-   P={};me=m.peer;dirty();
-   (m.peers||[]).forEach(function(q){ent(q.peer).presence=q.presence||{}});
-   ent(me).presence=Object.assign({},myPres);dirty();
-   if(Object.keys(myPres).length)raw({t:"pres",d:myPres});
-   delay=500;opened=true;
-   var w=wait;wait=[];w.forEach(function(r){r(room)});
-  }else if(m.t==="join"){ent(m.peer);dirty()}
-  else if(m.t==="leave"){delete P[m.peer];dirty()}
-  else if(m.t==="pres"){Object.assign(ent(m.peer).presence,m.d||{})}
-  else if(m.t==="ev"){fire(m.e,{data:m.d,peer:m.peer,isMe:m.peer===me})}
- };
- ws.onclose=function(){me=null;P={};dirty();setTimeout(connect,delay);delay=Math.min(delay*1.6,8000)};
- ws.onerror=function(){try{ws.close()}catch(e){}};
-}
-connect();
-window.claude={use:function(name){
- if(name!=="room")return Promise.resolve(null);
- if(opened)return Promise.resolve(room);
- return new Promise(function(r){wait.push(r)});
-}};
-})();
-</script>
+<div id="bigmsg"></div><script src="room-shim.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 (function(){
 var $=function(i){return document.getElementById(i)};
@@ -894,7 +852,7 @@ function preStart(){if(mode==="team"){teamPick(preStart2);return}P.team=0;preSta
 function preStart2(){$("menu").style.display="none";wmOpen=true;wstep=0;firing=false;ads=false;keys={};buildMenu();$("wmenu").style.display="flex";if(room){bindRoom();room.presence({n:P.name,c:P.col,m:mode,t:P.team|0}).catch(function(){})}}
 $("chin").addEventListener("keydown",function(e){e.stopPropagation();if(e.isComposing||e.keyCode===229)return;if(e.key==="Enter"){e.preventDefault();if(sendChat())closeChat()}else if(e.key==="Escape"||e.key==="Tab"){e.preventDefault();if(e.key==="Escape")closeChat()}});
 $("nick").addEventListener("keydown",function(e){e.stopPropagation();if(e.key==="Enter")$("go").click()});
-setInterval(function(){if($("tpick").style.display==="flex")updTeamPick();var n=others().length,ok=room&&room.connected&&room.connected();$("cn-pve").textContent="접속 "+cnt("pve")+"명";$("cn-team").textContent="접속 "+cnt("team")+"명";$("cn-pvp").textContent="접속 "+cnt("pvp")+"명";$("stat").textContent=room?(n>0?"친구 "+n+"명 접속 중 🎮":(mode==="practice"?"연습장 – 더미 5개가 있는 아레나에서 혼자 총기를 테스트해요.":mode==="pve"?"훈련장 – 봇 5마리와 연습해요. 친구가 들어오면 자동 합류!":mode==="team"?"팀 매치 – 시작하면 🔴 가다 위대 / 🔵 나동 연합 중 팀을 고르고, 같은 팀은 서로 공격할 수 없어요. 다른 플레이어를 기다리는 중!":"PVP – 봇 없이 플레이어끼리만 싸워요. 상대가 들어오길 기다리는 중!")):"오프라인 – 서버에 연결하는 중이에요. 잠시만 기다리거나 새로고침 해주세요.";$("net").textContent=room?(ok?"🟢 온라인 · 접속 "+(n+1)+"명":"🟡 연결 중…"):"🔴 오프라인 ("+(window.claude?"연결 거부됨":"런타임 없음")+")"},1000);
+setInterval(function(){if($("tpick").style.display==="flex")updTeamPick();var n=others().length,ok=room&&room.connected&&room.connected();$("cn-pve").textContent="접속 "+cnt("pve")+"명";$("cn-team").textContent="접속 "+cnt("team")+"명";$("cn-pvp").textContent="접속 "+cnt("pvp")+"명";$("stat").textContent=room?(n>0?"친구 "+n+"명 접속 중 🎮":(mode==="practice"?"연습장 – 더미 5개가 있는 아레나에서 혼자 총기를 테스트해요.":mode==="pve"?"훈련장 – 봇 5마리와 연습해요. 친구가 들어오면 자동 합류!":mode==="team"?"팀 매치 – 시작하면 🔴 가다 위대 / 🔵 나동 연합 중 팀을 고르고, 같은 팀은 서로 공격할 수 없어요. 다른 플레이어를 기다리는 중!":"PVP – 봇 없이 플레이어끼리만 싸워요. 상대가 들어오길 기다리는 중!")):"오프라인 – claude.ai에 로그인하고 초대된 사람만 온라인 대전이 돼요. 지금은 봇과 연습하세요.";$("net").textContent=room?(ok?"🟢 온라인 · 접속 "+(n+1)+"명":"🟡 연결 중…"):"🔴 오프라인 ("+(window.claude?"연결 거부됨":"런타임 없음")+")"},1000);
 
 /* 충돌 */
 var R=.4;
